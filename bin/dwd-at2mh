@@ -1,0 +1,84 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+"""
+Download DWD Stundenwerte Lufttemperatur 2m.
+
+Usage:
+  dwd-at2mh ( --recent | --historical | --stations | --test )
+
+Options:
+  -h --help         Zeige die Bedeutung der Parameter
+  --recent          Download der letzten ca. 500 Tage
+  --historical      Download des historischen Datenbestandes (das setzt eine
+                    leere Datenbank voraus, prüft es aber nicht)
+  --stations        Download der Stationsliste
+  --test            Experimentellen oder Einmal-Code ausführen
+"""
+# Created: 09.08.20
+# Recreated: 23.09.20
+
+import json
+import logging
+from pathlib import Path
+import os
+
+from docopt import docopt
+
+import johanna
+from dwdcdc import at2h, data
+
+
+def experimental():
+    logging.info("Ich bin da :)")
+
+
+OPCODE = None     # enable one for interactive debugging in IDE w/o using run configurations
+# OPCODE = "test"
+# OPCODE = "recent"
+# OPCODE = "historical"
+# OPCODE = "stations"
+
+
+def main():
+    # support interactive debugging
+    if OPCODE:
+        args = {
+            "--recent": OPCODE == "recent",
+            "--historical": OPCODE == "historical",
+            "--stations": OPCODE == "stations",
+            "--test": OPCODE == "test"
+        }
+        logging.info(f"interactive debugging, OPCODE={OPCODE}")
+    else:
+        args = docopt(__doc__, version='Download DWD Stundenwerte Lufttemperatur 2m – v0.1')
+        logging.info(json.dumps(args, indent=4))
+
+    # johanna.apply_schema("schema/hr-temp-00.sql")
+    # TODO enhance johanna, either for module data suport or for apply_schema(sql=...)
+    schema_path = "schema-at2h"
+    schema = data.schema(schema_path)
+    logging.info(f"Applying {schema_path}")
+    with johanna.Connection(text=f"apply {schema_path}") as c:
+        c.cur.executescript(schema)
+
+    if args["--stations"]:
+        at2h.ProcessStationen()
+
+    if args["--historical"]:
+        at2h.ProcessStationen()
+        at2h.process_dataset("historical")
+
+    if args["--recent"]:
+        at2h.process_dataset("recent")
+        # TODO nach dem Runterladen eine Kopie der Datenbank für Auswertungszwecke machen
+
+    if args["--test"]:
+        experimental()
+
+
+if __name__ == "__main__":
+    johanna.main(callback=main,
+                 mail_subject="Stundenwerte Lufttemperatur 2m - DWD-CDC Download",
+                 dotfolder=Path(os.environ["HOME"]) / ".dwd-cdc",
+                 dbname="hr-temp.sqlite")
