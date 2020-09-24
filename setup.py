@@ -20,7 +20,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='dwdcdc',
-    version = '0.1.0',
+    version = '0.2.0',
     description = 'Fool around with data from DWD Climate Data Center',
     long_description = long_description,
     long_description_content_type = "text/markdown",
@@ -31,7 +31,7 @@ setuptools.setup(
     packages = setuptools.find_packages(),
     include_package_data = True,
     zip_safe = False,
-    scripts = [ "bin/dwd-at2mh" ],
+    scripts = [ "bin/dwd-at2h" ],
     install_requires = [ 'docopt', ],
     classifiers=[
         "Programming Language :: Python :: 3",
