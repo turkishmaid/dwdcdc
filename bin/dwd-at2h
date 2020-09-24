@@ -5,7 +5,7 @@
 Download DWD Stundenwerte Lufttemperatur 2m.
 
 Usage:
-  dwd-at2mh ( --recent | --historical | --stations | --test )
+  dwd-at2h ( --recent | --historical | --stations | --test )
 
 Options:
   -h --help         Zeige die Bedeutung der Parameter
