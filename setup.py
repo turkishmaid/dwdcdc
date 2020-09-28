@@ -31,7 +31,7 @@ setuptools.setup(
     packages = setuptools.find_packages(),
     include_package_data = True,
     zip_safe = False,
-    scripts = [ "bin/dwd-at2h" ],
+    scripts = [ "bin/dwd-at2h", "bin/dwd-kld" ],
     install_requires = [ 'docopt', ],
     classifiers=[
         "Programming Language :: Python :: 3",

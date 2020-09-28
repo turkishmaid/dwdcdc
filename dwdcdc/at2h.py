@@ -119,7 +119,7 @@ class Station:
 
     def __init__(self, station):
         # select < 0.6 millis :)
-        SQL = """select 
+        sql = """select 
                 name, land, yyyymmdd_von, yyyymmdd_bis, 
                 ifnull(rc.yyyymmddhh, '1700010100'),
                 ifnull(max(rd.dwdts), '1700010100') 
@@ -129,26 +129,24 @@ class Station:
             where s.station = ?"""
 
         self.station = station
-        with johanna.Timer() as t:
-            with johanna.Connection(f"Station.__init__({station})") as c:
-                with johanna.Timer() as t:
-                    c.cur.execute(SQL, (station,))
-                    row = c.cur.fetchone()
-                    if row:
-                        self.name = row[0]
-                        self.land = row[1]
-                        self.isodate_von = row[2]
-                        self.isodate_bis = row[3]
-                        self.dwdts_recent = row[4]  # aus Tabelle
-                        self.dwdts_readings = row[5]  # aus Daten
-                        assert self.dwdts_recent == self.dwdts_readings, \
-                            f"recent: {self.dwdts_recent} vs. Daten: {self.dwdts_readings}"
-                        self.populated = True
-                        self.description = f"{self.station}, {self.name} ({LAND_MAP[self.land]})"
-                        logging.info(f"{self.description}: {self.isodate_von}..{self.isodate_bis} "
-                                     f"rc={self.dwdts_recent} rd={self.dwdts_readings}")
-                    else:
-                        self.populated = False
+        with johanna.Connection(f"Station.__init__({station})") as c:
+            c.cur.execute(sql, (station,))
+            row = c.cur.fetchone()
+        if row:
+            self.name = row[0]
+            self.land = row[1]
+            self.isodate_von = row[2]
+            self.isodate_bis = row[3]
+            self.dwdts_recent = row[4]  # aus Tabelle
+            self.dwdts_readings = row[5]  # aus Daten
+            assert self.dwdts_recent == self.dwdts_readings, \
+                f"recent: {self.dwdts_recent} vs. Daten: {self.dwdts_readings}"
+            self.populated = True
+            self.description = f"{self.station}, {self.name} ({LAND_MAP[self.land]})"
+            logging.info(f"{self.description}: {self.isodate_von}..{self.isodate_bis} "
+                         f"rc={self.dwdts_recent} rd={self.dwdts_readings}")
+        else:
+            self.populated = False
 
 
 def parse_clist(s: str) -> List[int]:
