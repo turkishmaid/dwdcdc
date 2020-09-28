@@ -55,7 +55,7 @@ def main():
         logging.info(json.dumps(args, indent=4))
 
     # johanna.apply_schema("schema/hr-temp-00.sql")
-    # TODO enhance johanna, either for module data suport or for apply_schema(sql=...)
+    # TODO enhance johanna, either for module data support or for apply_schema(sql=...)
     schema_path = "schema-at2h"
     schema = data.schema(schema_path)
     logging.info(f"Applying {schema_path}")

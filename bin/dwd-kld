@@ -1,0 +1,189 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+"""
+Download DWD Climate KL, daily.
+
+Usage:
+  dwd-kld ( --station STATION | --stations | --test )
+
+Options:
+  -h --help          Zeige die Bedeutung der Parameter
+  --station STATION  Download oder aktualisieren für eine Station
+  --stations         Download der Stationsliste
+  --install          Create table and get station list
+  --test             Experimentellen oder Einmal-Code ausführen
+"""
+# Created: 09.08.20
+# Recreated: 23.09.20
+
+import json
+import logging
+from pathlib import Path
+import os
+
+from docopt import docopt
+
+import johanna
+from dwdcdc import stations, ftplight
+from dwdcdc.datafile import AbstractDataFile, float_or_none, int_or_none
+
+
+SCHEMA_READINGS = """
+    CREATE TABLE IF NOT EXISTS readings (
+        station INTEGER,
+        dwdts TEXT,
+        year INTEGER,
+        month INTEGER,
+        day INTEGER,
+        qn3 INTEGER,
+        wind_max REAL,  -- fx, m/s
+        wind_avg REAL,  -- fm, m/s
+        qn4 INTEGER,
+        resp REAL,  -- rsk, mm
+        resp_form INTEGER,  -- rskf, key
+        sun_hrs REAL,  -- sdk, hours
+        snow_height INTEGER,  -- shk_tag, cm
+        cloud_cov_avg REAL,  -- nm, 1/8 (i.e. 0.0 ... 8.0)
+        vapour_prs_avg REAL,  -- vpm, hPa
+        prs_avg REAL,  -- pm, hPa
+        temp2m_avg REAL,  -- tmk, °C
+        humid_avg REAL,  -- upm, %
+        temp2m_max REAL,  -- txk, °C
+        temp2m_min REAL,  -- tnk, °C
+        temp5cm_min REAL,  -- tgk, °C
+        PRIMARY KEY (station, dwdts)
+    );
+"""
+
+
+def ensure_table():
+    with johanna.Connection(text=f"create? table readings") as c:
+        c.cur.executescript(SCHEMA_READINGS)
+
+
+class ClimateKLDailyDataFile(AbstractDataFile):
+
+    @property
+    def target_table_name(self) -> str:
+        return "readings"
+
+    def parse_one_row(self, row: list) -> tuple:
+        station = int(row[0])
+        dwdts = row[1]
+        year = int(dwdts[:4])
+        month = int(dwdts[4:6])
+        day = int(dwdts[6:8])
+        qn3 = int_or_none(row[2])
+        wind_max = float_or_none(row[3])
+        wind_avg = float_or_none(row[4])
+        qn4 = int_or_none(row[5])
+        resp = float_or_none(row[6])
+        resp_form = int_or_none(row[7])
+        sun_hrs = float_or_none(row[8])
+        snow_height = int_or_none(row[9])
+        cloud_cov_avg = float_or_none(row[10])
+        vapour_prs_avg = float_or_none(row[11])
+        prs_avg = float_or_none(row[12])
+        temp2m_avg = float_or_none(row[13])
+        humid_avg = float_or_none(row[14])
+        temp2m_max = float_or_none(row[15])
+        temp2m_min = float_or_none(row[16])
+        temp5cm_min = float_or_none(row[17])
+
+        tup = (
+            station,
+            dwdts,
+            year,
+            month,
+            day,
+            qn3,
+            wind_max,
+            wind_avg,
+            qn4,
+            resp,
+            resp_form,
+            sun_hrs,
+            snow_height,
+            cloud_cov_avg,
+            vapour_prs_avg,
+            prs_avg,
+            temp2m_avg,
+            humid_avg,
+            temp2m_max,
+            temp2m_min,
+            temp5cm_min
+        )
+        return tup
+
+
+def get_df(remote: str, station: int) -> None:
+    ftp = ftplight.dwd(remote)
+    file_list = ftplight.ftp_nlst(ftp, station=station)
+    if not file_list:
+        raise Exception("Da kann ich nix machen.")
+    for fnam in file_list:
+        ClimateKLDailyDataFile(ftp, fnam, verbose=True)
+    ftp.close()
+
+
+def download(station: int) -> None:
+    remote_base = "climate_environment/CDC/observations_germany/climate/daily/kl"
+    johanna.interactive(dbname="hurz.sqlite")
+    get_df(remote_base + "/" + "historical", station=station)
+    get_df(remote_base + "/" + "recent", station=station)
+
+
+def install():
+    ensure_table()
+    stations.get("KLD")
+
+
+def experimental(args):
+    logging.info("Ich bin da :)")
+
+
+# OPCODE = None     # enable one for interactive debugging in IDE w/o using run configurations
+# OPCODE = "test"
+# OPCODE = "install"
+OPCODE = "station"
+# OPCODE = "stations"
+
+
+def main():
+    # support interactive debugging
+    if OPCODE:
+        args = {
+            "--stations": OPCODE == "stations",
+            "--station": "5906" if OPCODE == "station" else False,  # Mannheim
+            "--install": OPCODE == "install",
+            "--test": OPCODE == "test"
+        }
+        logging.info(f"interactive debugging, OPCODE={OPCODE}")
+    else:
+        args = docopt(__doc__, version='Download DWD Tageswerte Klima KL – v1.0')
+        logging.info(json.dumps(args, indent=4))
+
+    # experimental(args)
+    # raise SystemExit(0)
+
+    if args["--test"]:
+        experimental(args)
+
+    if args["--install"]:
+        install()
+
+    if args["--stations"]:
+        stations.get("KLD")
+
+    if args["--station"]:
+        download(int(args["--station"]))
+        # at2h.ProcessStationen()
+        # at2h.process_dataset("historical")
+
+
+if __name__ == "__main__":
+    johanna.main(callback=main,
+                 mail_subject="Tageswerte Klima - DWD-CDC Download",
+                 dotfolder=Path(os.environ["HOME"]) / ".dwd-cdc",
+                 dbname="kld.sqlite")

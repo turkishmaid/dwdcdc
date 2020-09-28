@@ -92,7 +92,7 @@ def ftp_nlst(ftp: FTP, station: int = None) -> list:
         return collect.zips
 
     station_match = get_station_match(station)
-    logging.info(f"FTP: trying ot NLST {station_match}")
+    logging.info(f"FTP: trying to NLST {station_match}")
     success, fnams = repeat(download, do_times=3, throttle_sec=3.0)
     if not success:
         logging.info(f"Cannot retrieve file list for {station_match}.")
