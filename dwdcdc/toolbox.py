@@ -68,7 +68,7 @@ def station_from_fnam(fnam: str) -> int:
     return int(fnam.split(".")[0].split("_")[2])
 
 
-def check(v: str) -> None:
+def _check(v: str) -> None:
     """
     Check whether string looks valid on first sight.
     :param v: dwdts or iso day or hour
@@ -104,7 +104,7 @@ def to_iso(x: Union[str, datetime]) -> str:
     """
     if isinstance(x, str):
         assert len(x) == 8
-        check(x)
+        _check(x)
         return f"{x[0:4]}-{x[4:6]}-{x[6:]}"
     elif isinstance(x, datetime):
         return x.strftime("%Y-%m-%d")
@@ -120,7 +120,7 @@ def to_dwd(x: Union[str, datetime]):
     """
     if isinstance(x, str) and "-" in x:
         assert len(x) == 10
-        check(x)
+        _check(x)
         return x.replace("-", "")
     elif isinstance(x, datetime):
         return x.strftime("%Y%m%d")
@@ -173,20 +173,20 @@ class PointInTime:
             if "-" in value:
                 if hourly:  # format "YYYY-MM-DD HH"
                     assert len(value) == 13, "format must be YYYY-MM-DD HH"
-                    check(value)
+                    _check(value)
                     self.value = datetime.strptime(value, "%Y-%m-%d %H")
                 else:
                     assert len(value) == 10, "format must be YYYY-MM-DD"
-                    check(value)
+                    _check(value)
                     self.value = datetime.strptime(value, "%Y-%m-%d").date()
             else:
                 if hourly:  # format "YYYYMMDDHH"
                     assert len(value) == 10, "format must be YYYYMMDDHH"
-                    check(value)
+                    _check(value)
                     self.value = datetime.strptime(value, "%Y%m%d%H")
                 else:
                     assert len(value) == 8, "format must be YYYYMMDD"
-                    check(value)
+                    _check(value)
                     self.value = datetime.strptime(value, "%Y%m%d").date()
 
     def dwdts(self) -> str:
