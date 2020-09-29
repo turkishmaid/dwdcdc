@@ -139,7 +139,7 @@ class PointInTime:
         self.value = None
 
         # autodetect hourly if not specified
-        if hourly == None:
+        if hourly is None:
             if isinstance(value, datetime):
                 hourly = True
             elif isinstance(value, date):
@@ -241,7 +241,6 @@ class PointInTime:
         else:
             td = td // 86400 + 1
         return td
-
 
 
 class Pit(PointInTime):
