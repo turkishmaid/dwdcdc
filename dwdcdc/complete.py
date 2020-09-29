@@ -128,7 +128,7 @@ def delta(isots0: str, isots1: str) -> int:
 
 @dataclass
 class Timeframe:
-    iso_from: str
+    iso_from: str  # TODO change to toolbox.PointInTime
     iso_to: str
     indicators: str
     days: int

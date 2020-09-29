@@ -219,6 +219,38 @@ class TestPointInTimeAutodetect(unittest.TestCase):
         with self.assertRaises(AssertionError):
             toolbox.PointInTime("2021-12-161")
 
+    def test_typecast_good(self):
+        d = toolbox.PointInTime("2021-12-16")
+        self.assertEqual(d - "2021-12-15", 2)
+        self.assertEqual(d - "20211215", 2)
+
+    def test_typecast_bad(self):
+        d = toolbox.PointInTime("2021-12-16")
+        with self.assertRaises(AssertionError):
+            d - "2021121514"
+        with self.assertRaises(AssertionError):
+            d - "2021-12-15 14"
+        with self.assertRaises(AssertionError):
+            d - "Hurz"
+
+
+
+class TestPointInTimeNextPrev(unittest.TestCase):
+
+    def test_next(self):
+        silvester = toolbox.PointInTime("2021-12-31")
+        neujahr = silvester.next()
+        self.assertEqual(neujahr.iso(), "2022-01-01")
+
+    def test_prev(self):
+        neujahr = toolbox.PointInTime("2022-01-01")
+        silvester = neujahr.prev()
+        self.assertEqual(silvester.iso(), "2021-12-31")
+
+    def test_funny(self):
+        silvester = toolbox.PointInTime("2021-12-31")
+        neujahr = silvester.next()
+        self.assertEqual(neujahr - silvester, 2)
 
 if __name__ == '__main__':
     unittest.main()

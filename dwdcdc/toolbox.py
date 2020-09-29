@@ -8,7 +8,7 @@ Expected to fit for all datasets (may need refactoring over time).
 Created: 25.09.20
 """
 
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Union
 
 
@@ -229,7 +229,13 @@ class PointInTime:
         :param other: another PointInTime
         :return: interval length [self, other] including endpoints
         """
-        assert isinstance(other, PointInTime), "Pit-x only supported for other PointInTime."
+
+        # DONE make other a PointInTime, if it's not yet
+        # assert isinstance(other, PointInTime), "Pit-minus only supported for other PointInTime (yet)."
+        # auto-typecast
+        if not isinstance(other, PointInTime):
+            other = PointInTime(other)
+
         assert self.hourly == other.hourly, "a-b only supported for same hourly-value."
         ts = self.value
         to = other.value
@@ -241,6 +247,28 @@ class PointInTime:
         else:
             td = td // 86400 + 1
         return td
+
+    def next(self):
+        """
+        Add 1 day to a daily PointInTime or 1 hour to a hourly PointInTime and return the resulting PointInTime.
+        :return: next valid value
+        """
+        if self.hourly:
+            dt = timedelta(hours=1)
+        else:
+            dt = timedelta(days=1)
+        return PointInTime(self.value + dt)
+
+    def prev(self):
+        """
+        Subtract 1 day from a daily PointInTime or 1 hour from a hourly PointInTime and return the resulting PointInTime.
+        :return: next valid value
+        """
+        if self.hourly:
+            dt = timedelta(hours=-1)
+        else:
+            dt = timedelta(days=-1)
+        return PointInTime(self.value + dt)
 
 
 class Pit(PointInTime):
