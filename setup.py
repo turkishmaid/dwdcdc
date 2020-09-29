@@ -28,7 +28,7 @@ setuptools.setup(
     author = 'Sara Ziner',
     # author_email = 'flyingcircus@example.com',
     license = 'MIT',
-    packages = setuptools.find_packages(),
+    packages = setuptools.find_packages(exclude=("tests",)),
     include_package_data = True,
     zip_safe = False,
     scripts = [ "bin/dwd-at2h", "bin/dwd-kld" ],

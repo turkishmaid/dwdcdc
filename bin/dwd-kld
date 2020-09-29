@@ -5,7 +5,7 @@
 Download DWD Climate KL, daily.
 
 Usage:
-  dwd-kld ( --station STATION | --stations | --test )
+  dwd-kld ( --station STATION | --stations | --install | --test )
 
 Options:
   -h --help          Zeige die Bedeutung der Parameter
@@ -143,10 +143,10 @@ def experimental(args):
     logging.info("Ich bin da :)")
 
 
-# OPCODE = None     # enable one for interactive debugging in IDE w/o using run configurations
+OPCODE = None     # enable one for interactive debugging in IDE w/o using run configurations
 # OPCODE = "test"
 # OPCODE = "install"
-OPCODE = "station"
+# OPCODE = "station"
 # OPCODE = "stations"
 
 
