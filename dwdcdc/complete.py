@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import johanna
 
-#from dwdcdc.toolbox import Day
+from dwdcdc.toolbox import PointInTime
 from dwdcdc.dbtable import get_column_list, get_indicator_select, get_data_fields, get_two, filter_fields
 
 def get_data(station: int, field: str, tabname: str) -> List[list]:
@@ -125,20 +125,19 @@ def delta(isots0: str, isots1: str) -> int:
         ts0, ts1 = ts1, ts0  # I always wanted to code such :)
     return int(round((ts1 - ts0).total_seconds() / 86400.0,0)) + 1
 
-# overwrite this commit from tf-use-pit branch, please
 
 @dataclass
 class Timeframe:
-    iso_from: str  # TODO change to toolbox.PointInTime
-    iso_to: str
+    ts_from: PointInTime
+    ts_to: PointInTime
     indicators: str
     days: int
     rows: list
 
-    def _json(self, with_rows: bool = True):
+    def _json(self, with_rows: bool = False):
         o = {
-                "from": self.iso_from,
-                "to": self.iso_to,
+                "from": self.ts_from.iso(),
+                "to": self.ts_to.iso(),
                 "indicators": self.indicators,
                 "days": self.days
             }
@@ -149,7 +148,7 @@ class Timeframe:
                 o["rows"] = None
         return o
 
-def _persist(tfl: List[Timeframe], fields: List[str], name: Union[str, int], with_rows: bool = True) -> None:
+def _persist(tfl: List[Timeframe], fields: List[str], name: Union[str, int], with_rows: bool = False) -> None:
     assert isinstance(tfl, list)
     assert isinstance(fields, list)
     if isinstance(name, int):
@@ -162,84 +161,111 @@ def _persist(tfl: List[Timeframe], fields: List[str], name: Union[str, int], wit
         "fields": fields,
         "timeframes": [tf._json(with_rows=with_rows) for tf in tfl]
     }, indent=4)
-    fnam = folder / f"{name}-old.json"
+    fnam = folder / f"{name}-new.json"
     with open(fnam, "w") as fh:
         fh.write(s)
     logging.info(f"List[Timeframe] ({len(tfl)} rows) -> {fnam}")
 
 
-
-def overview(station: int, tabname: str = "readings", fields: List[str] = None) -> List[Timeframe]:
-    day = 86400
-    td_day = timedelta(days=1)
-
+def overview(station: int, tabname: str = "readings", fields: List[str] = None, with_rows: bool = False) -> List[Timeframe]:
+    assert isinstance(station, int)
+    assert isinstance(tabname, str)
     if not fields:
         fields = get_data_fields(tabname=tabname)
+    assert isinstance(fields, list)
+    assert isinstance(with_rows, bool)
+
     sql = get_indicator_select(tabname=tabname, fields=fields)
     with johanna.Connection(f"select from {tabname}") as c:
         rows = c.cur.execute(sql, (station, )).fetchall()
-    resu = []
-    dwdts0 = rows[0][0]
-    ts0 = datetime.strptime(dwdts0, '%Y%m%d')
+    tfs = []
+    ts0 = PointInTime(rows[0][0])
     srow0 = "".join(rows[0][1:])  # indicator string
-    tf = Timeframe(iso(ts0), None, srow0, None, None)
-    resu.append(tf)
+    tf = Timeframe(ts0, None, srow0, None, None)
+    tfs.append(tf)
     for i, row in enumerate(rows[1:]):
-        dwdts = row[0]
-        ts = datetime.strptime(dwdts, '%Y%m%d')
+        ts = PointInTime(row[0])
         srow = "".join(row[1:])  # indicator string
-        if int(round((ts - ts0).total_seconds(),0)) != day:
-            x = (ts - ts0).total_seconds()
-            # we misssed an occurence of '---------' ('-' only)
-            # insert n/a interval: [x, _, old] -> [x, t0, old], [t0+1, t-1, n/a], [t, _, new]
-            tf.iso_to = iso(ts0)
-            # resu.append(Timeframe(iso(ts0 + td_day), iso(ts - td_day), "."*len(srow), None, None))
-            resu.append(Timeframe(iso(ts0 + td_day), iso(ts - td_day), "no data", None, None))
-            tf = Timeframe(iso(ts), None, srow, None, None)
-            resu.append(tf)
+        if ts - ts0 > 1:  # not next day
+            # we passed an occurence of '---------' ('-' only)
+            #   -> insert n/a interval: [x, _, old] -> [x, ts0, old], [ts0+1, ts-1, n/a], [ts, _, new]
+            tf.ts_to = ts0
+            tfs.append(Timeframe(ts0.next(), ts.prev(), "no data", None, None))
+            tf = Timeframe(ts, None, srow, None, None)
+            tfs.append(tf)
         elif srow != srow0:
-            tf.iso_to = iso(ts0)
-            tf = Timeframe(iso(ts), None, srow, None, None)
-            resu.append(tf)
-        dwdts0 = dwdts
+            tf.ts_to = ts0
+            tf = Timeframe(ts, None, srow, None, None)
+            tfs.append(tf)
         ts0 = ts
         srow0 = srow
-    tf.iso_to = iso(ts)
-    for tf in resu:
-        tf.days = delta(tf.iso_from, tf.iso_to)
-    return resu
+    tf.ts_to = ts
+    for tf in tfs:
+        tf.days = tf.ts_to - tf.ts_from + 1
+    if with_rows:
+        for tf in tfs:
+            tf.rows = get_two(station, tf.ts_to.dwdts(), tabname=tabname, fields=fields)
+    return tfs
 
 
-def show_overview(station: int, tabname: str = "readings", fields: List[str] = None) -> None:
+def show_overview(station: int, tabname: str = "readings", fields: List[str] = None, with_rows: bool = False) -> List[Timeframe]:
+    assert isinstance(station, int)
+    assert isinstance(tabname, str)
     if not fields:
         fields = get_data_fields(tabname=tabname)
+    assert isinstance(fields, list)
+    assert isinstance(with_rows, bool)
+
     tfs = overview(station=station, tabname=tabname, fields=fields)
     for tf in tfs:
-        tf.rows = get_two(station, tf.iso_to, tabname=tabname, fields=fields)
-    _persist(tfs, fields, station)
+        tf.rows = get_two(station, tf.ts_to.dwdts(), tabname=tabname, fields=fields)
     print()
     for tf in tfs:
-        tf_str = f"{tf.iso_from} -{tf.days}-> {tf.iso_to}"
+        tf_str = f"{tf.ts_from} -{tf.days}-> {tf.ts_to}"
         print(f"{tf_str:30s}      {tf.indicators}")
-        print("    " + f"{tf.rows[0]}"[1:-1])
-        if len(tf.rows) == 2:
-            print("    " + f"{tf.rows[1]}"[1:-1])  # remove tuple brackets
+        if with_rows:
+            print("    " + f"{tf.rows[0]}"[1:-1])
+            if len(tf.rows) == 2:
+                print("    " + f"{tf.rows[1]}"[1:-1])  # remove tuple brackets
+    print(f"{len(tfs)} timeframes")
+    print(fields)
+    print()
+    return tfs
+
+
+def show_timeframens(tfs: List[Timeframe], fields: List[str], with_rows: bool = False) -> None:
+    assert isinstance(tfs, list)
+    assert isinstance(fields, list)
+    assert isinstance(with_rows, bool)
+
+    print()
+    for tf in tfs:
+        tf_str = f"{tf.ts_from} -{tf.days}-> {tf.ts_to}"
+        print(f"{tf_str:30s}      {tf.indicators}")
+        if with_rows:
+            print("    " + f"{tf.rows[0]}"[1:-1])
+            if len(tf.rows) == 2:
+                print("    " + f"{tf.rows[1]}"[1:-1])  # remove tuple brackets
     print(f"{len(tfs)} timeframes")
     print(fields)
     print()
 
 
 if __name__ == "__main__":
-    #station = 5906  #2444  #2290  # 5906
     pc0 = perf_counter()
     johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
+
+    tabname = "readings"
     fields = get_data_fields()
     # fields = ['resp', 'resp_form', 'temp2m_max', 'temp2m_min']
     # fields = ['temp2m_avg', 'temp2m_max', 'temp2m_min']
-
     print(fields)
+    with_rows = True
+
     for station in [2444, 2290, 5906]:
-        show_overview(station=station)
+        tfs = overview(station=station, tabname=tabname, fields=fields, with_rows=with_rows)
+        show_timeframens(tfs, fields, with_rows=with_rows)
+        _persist(tfs, fields, station, with_rows=with_rows)
 
     a = 17
     logging.info(f"total elapased: {perf_counter()-pc0}")

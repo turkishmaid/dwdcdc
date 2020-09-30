@@ -229,15 +229,15 @@ class TestPointInTime3Sub(unittest.TestCase):
         d0 = toolbox.PointInTime("2020-12-24")
         d1 = toolbox.PointInTime("2020-12-23")
         self.assertFalse(d0.hourly)
-        self.assertEqual(d1 - d0, 2)
-        self.assertEqual(d0 - d1, 2)
+        self.assertEqual(d1 - d0, 1)
+        self.assertEqual(d0 - d1, 1)
 
     def test_hourly(self):
         d0 = toolbox.PointInTime("2020-12-24 18")
         d1 = toolbox.PointInTime("2020-12-24 17")
         self.assertTrue(d0.hourly)
-        self.assertEqual(d1 - d0, 2)
-        self.assertEqual(d0 - d1, 2)
+        self.assertEqual(d1 - d0, 1)
+        self.assertEqual(d0 - d1, 1)
 
     def test_not_compare(self):
         d0 = toolbox.PointInTime("2020-12-24 18")
@@ -253,15 +253,15 @@ class TestPointInTime3Sub(unittest.TestCase):
 
     def test_typecast_good_iso_iso(self):
         d = toolbox.PointInTime("2021-12-16")
-        self.assertEqual(d - "2021-12-15", 2)
+        self.assertEqual(d - "2021-12-15", 1)
 
     def test_typecast_good_iso_dwdts(self):
         d = toolbox.PointInTime("2021-12-16")
-        self.assertEqual(d - "20211215", 2)
+        self.assertEqual(d - "20211215", 1)
 
     def test_typecast_good_iso_date(self):
         d = toolbox.PointInTime("2021-12-16")
-        self.assertEqual(d - date(2021, 12, 15), 2)
+        self.assertEqual(d - date(2021, 12, 15), 1)
 
     def test_typecast_bad_hourly_dwdts(self):
         d = toolbox.PointInTime("2021-12-16")
@@ -313,7 +313,7 @@ class TestPointInTime5NextPrev(unittest.TestCase):
     def test_funny(self):
         silvester = toolbox.PointInTime("2021-12-31")
         neujahr = silvester.next()
-        self.assertEqual(neujahr - silvester, 2)
+        self.assertEqual(neujahr - silvester, 1)
 
 
 if __name__ == '__main__':
