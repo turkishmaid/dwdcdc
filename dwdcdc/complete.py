@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import johanna
 
-from dwdcdc.toolbox import Day
+#from dwdcdc.toolbox import Day
 from dwdcdc.dbtable import get_column_list, get_indicator_select, get_data_fields, get_two, filter_fields
 
 def get_data(station: int, field: str, tabname: str) -> List[list]:
@@ -195,7 +195,7 @@ def show_overview(station: int, tabname: str = "readings", fields: List[str] = N
 
 
 if __name__ == "__main__":
-    station = 2444  #2290  # 5906
+    station = 5906  #2444  #2290  # 5906
     pc0 = perf_counter()
     johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
     fields = get_data_fields()
