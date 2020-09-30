@@ -17,7 +17,7 @@ class TestPointInTime1Daily(unittest.TestCase):
     def test_from_int(self):
         # shall not instantiate from other data types
         with self.assertRaises(ValueError) as e:
-            d = toolbox.PointInTime(20211216)
+            toolbox.PointInTime(20211216)
         self.assertEqual(e.exception.args[0], "pass date, datetime or string")
         self.assertEqual(e.exception.args[1], int)
         self.assertEqual(e.exception.args[2], '20211216')

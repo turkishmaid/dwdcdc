@@ -128,11 +128,13 @@ def to_dwd(x: Union[str, datetime]):
     else:
         assert False, f"to_dwd({x}: {type(x)})"
 
+
 # regex shall not test "too well" to not issue misguiding error messages
-REX_ISO_DAILY = re.compile(r"[0-9]{4,4}-[0-9]{2,2}-[0-9]{2,2}")
-REX_ISO_HOURLY = re.compile(r"[0-9]{4,4}-[0-9]{2,2}-[0-9]{2,2} [0-9]{2,2}")
-REX_DWDTS_DAILY = re.compile(r"[0-9]{4,4}[0-9]{2,2}[0-9]{2,2}")
-REX_DWDTS_HOURLY = re.compile(r"[0-9]{4,4}[0-9]{2,2}[0-9]{2,2}[0-9]{2,2}")
+REX_ISO_DAILY = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+REX_ISO_HOURLY = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}")
+REX_DWDTS_DAILY = re.compile(r"[0-9]{4}[0-9]{2}[0-9]{2}")
+REX_DWDTS_HOURLY = re.compile(r"[0-9]{4}[0-9]{2}[0-9]{2}[0-9]{2}")
+
 
 class PointInTime:
 
@@ -285,8 +287,9 @@ class PointInTime:
 
     def prev(self):
         """
-        Subtract 1 day from a daily PointInTime or 1 hour from a hourly PointInTime and return the resulting PointInTime.
-        :return: next valid value
+        Subtract 1 day from a daily PointInTime or 1 hour from a hourly PointInTime and return the resulting
+        PointInTime.
+        :return: previous valid value
         """
         if self.hourly:
             dt = timedelta(hours=-1)
