@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import johanna
 
-from dwdcdc.toolbox import Day
+from dwdcdc.toolbox import PointInTime
 from dwdcdc.dbtable import get_column_list, get_indicator_select, get_data_fields, get_two, filter_fields
 
 def get_data(station: int, field: str, tabname: str) -> List[list]:
@@ -128,8 +128,8 @@ def delta(isots0: str, isots1: str) -> int:
 
 @dataclass
 class Timeframe:
-    iso_from: str  # TODO change to toolbox.PointInTime
-    iso_to: str
+    ts_from: PointInTime
+    ts_to: PointInTime
     indicators: str
     days: int
     rows: list
@@ -137,7 +137,6 @@ class Timeframe:
 
 def overview(station: int, tabname: str = "readings", fields: List[str] = None) -> List[Timeframe]:
     day = 86400
-    td_day = timedelta(days=1)
 
     if not fields:
         fields = get_data_fields(tabname=tabname)
@@ -145,34 +144,31 @@ def overview(station: int, tabname: str = "readings", fields: List[str] = None) 
     with johanna.Connection(f"select from {tabname}") as c:
         rows = c.cur.execute(sql, (station, )).fetchall()
     resu = []
-    dwdts0 = rows[0][0]
-    ts0 = datetime.strptime(dwdts0, '%Y%m%d')
+    ts0 = PointInTime(rows[0][0])
     srow0 = "".join(rows[0][1:])  # indicator string
-    tf = Timeframe(iso(ts0), None, srow0, None, None)
+    tf = Timeframe(ts0, None, srow0, None, None)
     resu.append(tf)
     for i, row in enumerate(rows[1:]):
-        dwdts = row[0]
-        ts = datetime.strptime(dwdts, '%Y%m%d')
+        ts = PointInTime(row[0])
         srow = "".join(row[1:])  # indicator string
-        if int(round((ts - ts0).total_seconds(),0)) != day:
-            x = (ts - ts0).total_seconds()
+        # if int(round((ts - ts0).total_seconds(),0)) != day:
+        if ts - ts0 > 2:  # not next day
             # we misssed an occurence of '---------' ('-' only)
             # insert n/a interval: [x, _, old] -> [x, t0, old], [t0+1, t-1, n/a], [t, _, new]
-            tf.iso_to = iso(ts0)
+            tf.ts_to = ts0
             # resu.append(Timeframe(iso(ts0 + td_day), iso(ts - td_day), "."*len(srow), None, None))
-            resu.append(Timeframe(iso(ts0 + td_day), iso(ts - td_day), "no data", None, None))
-            tf = Timeframe(iso(ts), None, srow, None, None)
+            resu.append(Timeframe(ts0.next(), ts.prev(), "no data", None, None))
+            tf = Timeframe(ts, None, srow, None, None)
             resu.append(tf)
         elif srow != srow0:
-            tf.iso_to = iso(ts0)
-            tf = Timeframe(iso(ts), None, srow, None, None)
+            tf.ts_to = ts0
+            tf = Timeframe(ts, None, srow, None, None)
             resu.append(tf)
-        dwdts0 = dwdts
         ts0 = ts
         srow0 = srow
-    tf.iso_to = iso(ts)
+    tf.ts_to = ts
     for tf in resu:
-        tf.days = delta(tf.iso_from, tf.iso_to)
+        tf.days = tf.ts_to - tf.ts_from
     return resu
 
 
@@ -181,10 +177,10 @@ def show_overview(station: int, tabname: str = "readings", fields: List[str] = N
         fields = get_data_fields(tabname=tabname)
     tfs = overview(station=station, tabname=tabname, fields=fields)
     for tf in tfs:
-        tf.rows = get_two(station, tf.iso_to, tabname=tabname, fields=fields)
+        tf.rows = get_two(station, tf.ts_to.dwdts(), tabname=tabname, fields=fields)
     print()
     for tf in tfs:
-        tf_str = f"{tf.iso_from} -{tf.days}-> {tf.iso_to}"
+        tf_str = f"{tf.ts_from} -{tf.days}-> {tf.ts_to}"
         print(f"{tf_str:30s}      {tf.indicators}")
         print("    " + f"{tf.rows[0]}"[1:-1])
         if len(tf.rows) == 2:
@@ -195,7 +191,7 @@ def show_overview(station: int, tabname: str = "readings", fields: List[str] = N
 
 
 if __name__ == "__main__":
-    station = 2444  #2290  # 5906
+    station = 5906  # 2444  #2290  # 5906
     pc0 = perf_counter()
     johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
     fields = get_data_fields()
@@ -203,37 +199,7 @@ if __name__ == "__main__":
     # fields = ['temp2m_avg', 'temp2m_max', 'temp2m_min']
 
     print(fields)
-    if 1 == 0:
-        l = complete(station=5906, fields=fields)
-        for field in l:
-            print()
-            print(field)
-            for i, tf in enumerate(l[field]):
-                if i > 0:
-                    miss = ( datetime.strptime(tf[0], '%Y%m%d') -
-                             datetime.strptime(l[field][i-1][1], '%Y%m%d') ).days - 1
-                    miss = f"{miss:5d}"
-                else:
-                    miss = "     "
-                consec = ( datetime.strptime(tf[1], '%Y%m%d') -
-                             datetime.strptime(tf[0], '%Y%m%d') ).days + 1
-                print(f"{miss} {consec:5d} | {iso(tf[0])} .. {iso(tf[1])}")
-        print()
-        print(l["temp2m_min"] == l["temp2m_max"])
     show_overview(station=station)
 
-    tfs = overview(station=station,fields=fields)
-    for tf in tfs:
-        tf.rows = get_two(station, tf.iso_to, fields=fields)
-    print()
-    for tf in tfs:
-        tf_str = f"{tf.iso_from} -{tf.days}-> {tf.iso_to}"
-        print(f"{tf_str:30s}      {tf.indicators}")
-        print("    " + f"{tf.rows[0]}"[1:-1])
-        if len(tf.rows) == 2:
-            print("    " + f"{tf.rows[1]}"[1:-1])
-    print(f"{len(tfs)} timeframes")
-    print(fields)
-    print()
     a = 17
     logging.info(f"total elapased: {perf_counter()-pc0}")
