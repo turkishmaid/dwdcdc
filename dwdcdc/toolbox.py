@@ -132,9 +132,11 @@ class PointInTime:
 
     def __init__(self, value: Union[str, date, datetime], hourly: bool = None):
         """
-        Initialize from datetime or string like "20211216" or "2021-12-16".
-        :param value: value as datetime or string like "20211216" or "2021-12-16"
-        :param hourly: value shall be interpreted as hourly value
+        Initialize a daily or hourly PointInTime. Daily PointInTime will be created from date or string like
+        "20211216" or "2021-12-16". Hourly PointInTime will be created from datetime or string like "2021121614"
+        or "2021-12-16 14".
+        :param value: variant value as described above
+        :param hourly: (deprecated) value shall be interpreted as hourly value
         """
         self.value = None
 
