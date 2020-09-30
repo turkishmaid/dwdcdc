@@ -161,7 +161,7 @@ def _persist(tfl: List[Timeframe], fields: List[str], name: Union[str, int], wit
         "fields": fields,
         "timeframes": [tf._json(with_rows=with_rows) for tf in tfl]
     }, indent=4)
-    fnam = folder / f"{name}-new.json"
+    fnam = folder / f"{name}.json"
     with open(fnam, "w") as fh:
         fh.write(s)
     logging.info(f"List[Timeframe] ({len(tfl)} rows) -> {fnam}")
@@ -251,10 +251,7 @@ def show_timeframens(tfs: List[Timeframe], fields: List[str], with_rows: bool = 
     print()
 
 
-if __name__ == "__main__":
-    pc0 = perf_counter()
-    johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
-
+def spot_check_overview():
     tabname = "readings"
     fields = get_data_fields()
     # fields = ['resp', 'resp_form', 'temp2m_max', 'temp2m_min']
@@ -266,6 +263,12 @@ if __name__ == "__main__":
         tfs = overview(station=station, tabname=tabname, fields=fields, with_rows=with_rows)
         show_timeframens(tfs, fields, with_rows=with_rows)
         _persist(tfs, fields, station, with_rows=with_rows)
+
+
+if __name__ == "__main__":
+    pc0 = perf_counter()
+    johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
+    spot_check_overview()
 
     a = 17
     logging.info(f"total elapased: {perf_counter()-pc0}")
