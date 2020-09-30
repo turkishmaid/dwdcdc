@@ -152,7 +152,7 @@ def overview(station: int, tabname: str = "readings", fields: List[str] = None) 
         ts = PointInTime(row[0])
         srow = "".join(row[1:])  # indicator string
         # if int(round((ts - ts0).total_seconds(),0)) != day:
-        if ts - ts0 > 2:  # not next day
+        if ts - ts0 > 1:  # not next day
             # we misssed an occurence of '---------' ('-' only)
             # insert n/a interval: [x, _, old] -> [x, t0, old], [t0+1, t-1, n/a], [t, _, new]
             tf.ts_to = ts0
@@ -168,7 +168,7 @@ def overview(station: int, tabname: str = "readings", fields: List[str] = None) 
         srow0 = srow
     tf.ts_to = ts
     for tf in resu:
-        tf.days = tf.ts_to - tf.ts_from
+        tf.days = tf.ts_to - tf.ts_from + 1
     return resu
 
 

@@ -246,8 +246,9 @@ class PointInTime:
 
     def __sub__(self, other) -> int:
         """
-        Calculate interval length in days for daily PointInTimes, i.e. "2019-12-24" - "2019-12-23" = 2 and
-        interval lengths in hours for hourly PointInTimes, i.e. "2019-12-24 15" - "2019-12-24 14" = 2.
+        Calculate difference between two PointInTimes. Differene is returned in days for daily PointInTimes,
+        i.e. "2019-12-24" - "2019-12-23" = 1. Difference is returned in hours for hourly PointInTimes, i.e.
+        "2019-12-24 15" - "2019-12-24 14" = 1.
         :param other: another PointInTime
         :return: interval length [self, other] including endpoints
         """
@@ -269,9 +270,9 @@ class PointInTime:
             to, ts = ts, to
         td = int(round((ts - to).total_seconds(), 0))
         if self.hourly:
-            td = td // 3600 + 1
+            td = td // 3600
         else:
-            td = td // 86400 + 1
+            td = td // 86400
         return td
 
     def next(self):
