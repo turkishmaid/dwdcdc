@@ -8,7 +8,7 @@ Created: 27.09.20
 """
 
 import json
-from typing import List, Union
+from typing import List, Union, Tuple
 from datetime import datetime, timedelta
 from time import perf_counter
 import logging
@@ -182,7 +182,7 @@ select y.year, y.days,
         where y.year between substr(s.isodate_from, 1, 4) and substr(s.isodate_to, 1, 4);
 """
 
-def generate_missingdays_select(tabname: str = "readings") -> str:
+def generate_missingdays_select(tabname: str = "readings") -> Tuple[str, list]:
     fields = ["dwdts"]
     fields.extend(get_data_fields(tabname))
     sep = ", \n"
@@ -198,27 +198,39 @@ def generate_missingdays_select(tabname: str = "readings") -> str:
                 group by year) r
             on y.year = r.year
         join stations s on s.station = ?
-            where y.year between substr(s.isodate_from, 1, 4) and substr(s.isodate_to, 1, 4);
+            where y.year between substr(s.isodate_from, 1, 4) and substr(s.isodate_to, 1, 4)
+        order by y.year desc;
     """
-    print(sql)
-    return sql
+    # print(sql)
+    return sql, fields
 
 
-def good_from(station: int, field: str, ratio: float = 1.0, tabname: str = "readings") -> PointInTime:
+def good_from(station: int, missing_days: int = 4, tabname: str = "readings") -> dict:
     """
-    Determines the earliest PointInTime from which the field is "good", i.e. has value for >= ratio of all days from
-    that point in time.
-    :param station:
-    :param field:
-    :param ratio:
-    :param tabname:
+    Determines from which year we have almost consecutive data for each value. "Almost" will be assessed by the number
+    of days where thae value is not available. A year is almost complete when max. missing_days readings for that value
+    are missing.
+    :param station: the station to asses
+    :param missing_days: measure for "almost complete"
+    :param tabname: name of the table where the readings are stored, defualts to "readings"
     :return:
     """
-    sql = "select " + f"dwdts, {field} from {tabname} where station = ? order by dwdts desc"
-    with johanna.Connection(f"good_from({station}, {field}, {ratio:0.2f})") as c:
-        c.cur.execute(sql, (station, ))
-        while True:
-            pass
+    sql, fields = generate_missingdays_select(tabname)
+    result = {}
+    with johanna.Connection(f"missing days") as c:
+        rows = c.cur.execute(sql, (station, station, )).fetchall()
+    for row in rows:
+        year = row[0]
+        for i, field in enumerate(fields):
+            if row[i+2] > missing_days:
+                if not field in result:
+                    result[field] = int(year) + 1
+        if len(result) == len(row) - 2:
+            logging.info(f"nothing good enough further back than {year+1}, data back until {rows[-1][0]}")
+            break
+    for field in result:
+        logging.info(f"   {field:20s} -> {result[field]}")
+    return result
 
 
 
@@ -227,7 +239,8 @@ if __name__ == "__main__":
     pc0 = perf_counter()
     johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
     #spot_check_overview()
-    generate_missingdays_select()
+    #generate_missingdays_select()
+    good_from(2290)
 
     a = 17
     logging.info(f"total elapased: {perf_counter()-pc0}")

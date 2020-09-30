@@ -7,7 +7,6 @@ Utilities for SQLite database tables-
 Created: 28.09.20
 """
 
-import json
 from typing import List
 import logging
 from datetime import date
@@ -33,7 +32,7 @@ def get_columns(tabnam: str = "readings") -> List[tuple]:
     :param tabnam: table name in current johanna database
     :return: list of tuples (colnam: str, type: str, primary_key: int)
     """
-    if not tabnam in get_columns.buffer:
+    if tabnam not in get_columns.buffer:
         with johanna.Connection(f"columns of {tabnam}") as c:
             rows = c.cur.execute(SQL_COLUMNS, (tabnam, )).fetchall()
         get_columns.buffer[tabnam] = rows
@@ -55,7 +54,6 @@ def verify(tabnam: str = "readings") -> bool:
             columns[1] != ("dwdts", "TEXT", 2):
         logging.info(f"table {tabnam}: primary key is not (station INTEGER, dwdts TEXT)")
         return False
-    good = True
     for col in columns[2:]:
         if col[2] != 0:
             logging.info(f"table {tabnam}: too many fields in primary key")
@@ -76,7 +74,7 @@ def get_column_list(tabnam: str = "readings") -> list:
 def filter_fields(fields: List[str]) -> List[str]:
     a = []
     for f in fields:
-        if f in ["station", "dwdts", "day", "month", "year"]:  # skip optional fields
+        if f in ["station", "dwdts", "hour", "day", "month", "year"]:  # skip optional fields
             continue
         if f.startswith("qn") and f[2:].isdigit:
             continue
@@ -102,7 +100,7 @@ def get_two(station: int, dwdts: str, tabname: str = "readings", fields: List[st
     if not fields:
         fields = get_data_fields(tabname)
     sql = "select " + f"dwdts, {', '.join(fields)} from {tabname} where station = ? and dwdts >= ? order by dwdts limit 2"
-    #logging.info(sql)
+    # logging.info(sql)
     with johanna.Connection(f"from dwdts = {dwdts}", quiet=True) as c:
         rows = c.cur.execute(sql, (station, dwdts)).fetchall()
     return rows
@@ -128,13 +126,13 @@ def create_years():
         if year == thisyear:
             last = date.today()
         else:
-            last = date(year,12,31)
-        return (last - date(year,1,1)).days + 1
+            last = date(year, 12, 31)
+        return (last - date(year, 1, 1)).days + 1
 
     thisyear = date.today().year
     with johanna.Connection(text=f"create? table years") as c:
         c.cur.executescript(SQL_CREATE_YEARS)
-    years = [(y, days(y)) for y in range(1700,2051)]
+    years = [(y, days(y)) for y in range(1700, 2051)]
     with johanna.Connection(text=f"insert? {len(years)} years") as c:
         c.cur.executemany(SQL_INSERT_YEARS, years)
         c.commit()
