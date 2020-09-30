@@ -10,6 +10,7 @@ Created: 28.09.20
 import json
 from typing import List
 import logging
+from datetime import date
 
 import johanna
 
@@ -107,12 +108,46 @@ def get_two(station: int, dwdts: str, tabname: str = "readings", fields: List[st
     return rows
 
 
+SQL_CREATE_YEARS = """
+    CREATE TABLE IF NOT EXISTS years (
+        year INTEGER,
+        days INTEGER,
+        PRIMARY KEY (year)
+    );
+"""
+
+SQL_INSERT_YEARS = """
+    INSERT OR REPLACE INTO years
+        VALUES (?, ?)
+"""
+
+
+def create_years():
+
+    def days(year):
+        if year == thisyear:
+            last = date.today()
+        else:
+            last = date(year,12,31)
+        return (last - date(year,1,1)).days + 1
+
+    thisyear = date.today().year
+    with johanna.Connection(text=f"create? table years") as c:
+        c.cur.executescript(SQL_CREATE_YEARS)
+    years = [(y, days(y)) for y in range(1700,2051)]
+    with johanna.Connection(text=f"insert? {len(years)} years") as c:
+        c.cur.executemany(SQL_INSERT_YEARS, years)
+        c.commit()
 
 
 if __name__ == "__main__":
     johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
-    assert verify()
-    columns = get_columns()
-    column_list = get_column_list()
-    print(get_indicator_select())
-    hurz = 17
+    create_years()
+
+    if 1 == 0:
+        johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
+        assert verify()
+        columns = get_columns()
+        column_list = get_column_list()
+        print(get_indicator_select())
+        hurz = 17

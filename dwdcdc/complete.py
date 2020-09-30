@@ -19,112 +19,6 @@ import johanna
 from dwdcdc.toolbox import PointInTime
 from dwdcdc.dbtable import get_column_list, get_indicator_select, get_data_fields, get_two, filter_fields
 
-def get_data(station: int, field: str, tabname: str) -> List[list]:
-    """
-
-    :param station:
-    :param field:
-    :param tabname:
-    :return:
-    """
-    # TODO für Stundenwerte können das 1,2 Mio Sätze werden -> irgendwie anders machen
-    sql = "SELECT " + \
-          f"""  dwdts, {field} 
-                FROM {tabname} 
-                WHERE station = ? 
-                    AND {field} IS NOT NULL 
-                ORDER BY dwdts"""
-    with johanna.Connection(text="select values") as c:
-        c.cur.execute(sql, (station, ))
-        rows = c.cur.fetchall()
-    return rows
-
-
-def dwdts_diff(ts0: str, ts1: str) -> int:
-    """
-
-    :param ts0: like '19690523'
-    :param ts1: like '19690525' >= ts1
-    :return: difference (in days)
-    """
-
-def complete(station: int, fields: List[str], tabname: str = "readings", hours: bool = False) -> dict:
-    """
-
-    :param station: numerical station id
-    :param fields: list of field names to check
-    :param tabname: table name (must have primary key (station, dwdts)
-    :param hours: False when daily data is expected (hourly data not supported yet)
-    :return: dict with key field and value list of timefremes with consecutive data
-    """
-
-    assert not hours, "hourly data not supported yet"
-    day = 86400
-
-    resu = {}
-    for field in fields:
-        resu[field] = []
-        rows = get_data(station, field, tabname)
-        if len(rows) == 0:
-            break
-        dwdts0 = rows[0][0]
-        ts0 = datetime.strptime(dwdts0, '%Y%m%d')
-        tf = [dwdts0, None]
-        resu[field].append(tf)
-        for i, row in enumerate(rows[1:]):
-            dwdts = row[0]
-            ts = datetime.strptime(dwdts, '%Y%m%d')
-            if int(round((ts - ts0).total_seconds(),0)) != day:
-                tf[1] = dwdts0
-                tf = [dwdts, None]
-                resu[field].append(tf)
-            dwdts0 = dwdts
-            ts0 = ts
-        tf[1] = dwdts
-    return resu
-
-
-def iso(x: Union[str, datetime]) -> str:
-    """
-    Transform dwdts (like "20211216") or datetime to iso date (like "2021-12-16").
-    :param x: dwdts or datetime
-    :return: iso date as string
-    """
-    if isinstance(x, str):
-        return f"{x[0:4]}-{x[4:6]}-{x[6:]}"
-    elif isinstance(x, datetime):
-        return x.strftime("%Y-%m-%d")
-    else:
-        assert False, type(x)
-
-
-def dwd(x: Union[str, datetime]):
-    """
-    Transform iso date (like "2021-12-16") or datetime to dwdts (like "20211216")
-    :param x: iso date or datetime
-    :return: dwdts
-    """
-    if isinstance(x, str) and "-" in x:
-        return x.replace("-", "")
-    elif isinstance(x, datetime):
-        return x.strftime("%Y%m%d")
-    else:
-        assert False, type(x)
-
-
-def delta(isots0: str, isots1: str) -> int:
-    """
-    Calculate days between (including ends) two dates, i.e. "1989-12-25" - "1989-12-24" = 2.
-    :param isots0: an ISO date (like "1989-12-24")
-    :param isots1: an ISO date (like "1989-12-25") >= isots0
-    :return: days between the two parameters, including ends
-    """
-    ts0 = datetime.strptime(isots0, '%Y-%m-%d')
-    ts1 = datetime.strptime(isots1, '%Y-%m-%d')
-    if ts1 < ts0:
-        ts0, ts1 = ts1, ts0  # I always wanted to code such :)
-    return int(round((ts1 - ts0).total_seconds() / 86400.0,0)) + 1
-
 
 @dataclass
 class Timeframe:
@@ -264,11 +158,76 @@ def spot_check_overview():
         show_timeframens(tfs, fields, with_rows=with_rows)
         _persist(tfs, fields, station, with_rows=with_rows)
 
+"""
+Sample SELECT:
+
+select y.year, y.days,
+       case when r.dwdts is not null then r.dwdts else 0 end / 1.0 / y.days as dwdts,
+       case when r.temp_max is not null then r.temp_max else 0 end / 1.0 / y.days as temp_max,
+       case when r.temp_avg is not null then r.temp_avg else 0 end / 1.0 / y.days as temp_avg,
+       case when r.temp_min is not null then r.temp_min else 0 end / 1.0 / y.days as temp_min,
+       case when r.resp is not null then r.resp else 0 end / 1.0 / y.days as resp
+    from (select year, days from years) y
+    left outer join (select year,
+                sum(case when dwdts is not null then 1 else 0 end) as dwdts,
+                sum(case when temp2m_max is not null then 1 else 0 end) as temp_max,
+                sum(case when temp2m_avg is not null then 1 else 0 end) as temp_avg,
+                sum(case when temp2m_min is not null then 1 else 0 end) as temp_min,
+                sum(case when resp is not null then 1 else 0 end) as resp
+            from readings
+            where station = 2290
+            group by year) r
+        on y.year = r.year
+    join stations s on s.station = 2290
+        where y.year between substr(s.isodate_from, 1, 4) and substr(s.isodate_to, 1, 4);
+"""
+
+def generate_missingdays_select(tabname: str = "readings") -> str:
+    fields = ["dwdts"]
+    fields.extend(get_data_fields(tabname))
+    sep = ", \n"
+    cs = [f"y.days - case when r.{f} is not null then r.{f} else 0 end as {f}" for f in fields]
+    ss = [f"sum(case when {f} is not null then 1 else 0 end) as {f}" for f in fields]
+    sql = "select " + f"""y.year, y.days,
+           {sep.join(cs)}
+        from (select year, days from years) y
+        left outer join (select year,
+                    {sep.join(ss)}
+                from {tabname}
+                where station = ?
+                group by year) r
+            on y.year = r.year
+        join stations s on s.station = ?
+            where y.year between substr(s.isodate_from, 1, 4) and substr(s.isodate_to, 1, 4);
+    """
+    print(sql)
+    return sql
+
+
+def good_from(station: int, field: str, ratio: float = 1.0, tabname: str = "readings") -> PointInTime:
+    """
+    Determines the earliest PointInTime from which the field is "good", i.e. has value for >= ratio of all days from
+    that point in time.
+    :param station:
+    :param field:
+    :param ratio:
+    :param tabname:
+    :return:
+    """
+    sql = "select " + f"dwdts, {field} from {tabname} where station = ? order by dwdts desc"
+    with johanna.Connection(f"good_from({station}, {field}, {ratio:0.2f})") as c:
+        c.cur.execute(sql, (station, ))
+        while True:
+            pass
+
+
+
 
 if __name__ == "__main__":
     pc0 = perf_counter()
     johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
-    spot_check_overview()
+    #spot_check_overview()
+    generate_missingdays_select()
 
     a = 17
     logging.info(f"total elapased: {perf_counter()-pc0}")
