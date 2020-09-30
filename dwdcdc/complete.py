@@ -125,6 +125,7 @@ def delta(isots0: str, isots1: str) -> int:
         ts0, ts1 = ts1, ts0  # I always wanted to code such :)
     return int(round((ts1 - ts0).total_seconds() / 86400.0,0)) + 1
 
+# overwrite this commit from tf-use-pit branch, please
 
 @dataclass
 class Timeframe:
@@ -133,6 +134,39 @@ class Timeframe:
     indicators: str
     days: int
     rows: list
+
+    def _json(self, with_rows: bool = True):
+        o = {
+                "from": self.iso_from,
+                "to": self.iso_to,
+                "indicators": self.indicators,
+                "days": self.days
+            }
+        if with_rows:
+            if hasattr(self, "rows"):
+                o["rows"] = self.rows
+            else:
+                o["rows"] = None
+        return o
+
+def _persist(tfl: List[Timeframe], fields: List[str], name: Union[str, int], with_rows: bool = True) -> None:
+    assert isinstance(tfl, list)
+    assert isinstance(fields, list)
+    if isinstance(name, int):
+        name = str(name)
+    assert isinstance(name, str)
+    assert isinstance(with_rows, bool)
+
+    folder = johanna.private._DOTFOLDER
+    s = json.dumps({
+        "fields": fields,
+        "timeframes": [tf._json(with_rows=with_rows) for tf in tfl]
+    }, indent=4)
+    fnam = folder / f"{name}-old.json"
+    with open(fnam, "w") as fh:
+        fh.write(s)
+    logging.info(f"List[Timeframe] ({len(tfl)} rows) -> {fnam}")
+
 
 
 def overview(station: int, tabname: str = "readings", fields: List[str] = None) -> List[Timeframe]:
@@ -182,6 +216,7 @@ def show_overview(station: int, tabname: str = "readings", fields: List[str] = N
     tfs = overview(station=station, tabname=tabname, fields=fields)
     for tf in tfs:
         tf.rows = get_two(station, tf.iso_to, tabname=tabname, fields=fields)
+    _persist(tfs, fields, station)
     print()
     for tf in tfs:
         tf_str = f"{tf.iso_from} -{tf.days}-> {tf.iso_to}"
@@ -195,7 +230,7 @@ def show_overview(station: int, tabname: str = "readings", fields: List[str] = N
 
 
 if __name__ == "__main__":
-    station = 5906  #2444  #2290  # 5906
+    #station = 5906  #2444  #2290  # 5906
     pc0 = perf_counter()
     johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
     fields = get_data_fields()
@@ -203,37 +238,8 @@ if __name__ == "__main__":
     # fields = ['temp2m_avg', 'temp2m_max', 'temp2m_min']
 
     print(fields)
-    if 1 == 0:
-        l = complete(station=5906, fields=fields)
-        for field in l:
-            print()
-            print(field)
-            for i, tf in enumerate(l[field]):
-                if i > 0:
-                    miss = ( datetime.strptime(tf[0], '%Y%m%d') -
-                             datetime.strptime(l[field][i-1][1], '%Y%m%d') ).days - 1
-                    miss = f"{miss:5d}"
-                else:
-                    miss = "     "
-                consec = ( datetime.strptime(tf[1], '%Y%m%d') -
-                             datetime.strptime(tf[0], '%Y%m%d') ).days + 1
-                print(f"{miss} {consec:5d} | {iso(tf[0])} .. {iso(tf[1])}")
-        print()
-        print(l["temp2m_min"] == l["temp2m_max"])
-    show_overview(station=station)
+    for station in [2444, 2290, 5906]:
+        show_overview(station=station)
 
-    tfs = overview(station=station,fields=fields)
-    for tf in tfs:
-        tf.rows = get_two(station, tf.iso_to, fields=fields)
-    print()
-    for tf in tfs:
-        tf_str = f"{tf.iso_from} -{tf.days}-> {tf.iso_to}"
-        print(f"{tf_str:30s}      {tf.indicators}")
-        print("    " + f"{tf.rows[0]}"[1:-1])
-        if len(tf.rows) == 2:
-            print("    " + f"{tf.rows[1]}"[1:-1])
-    print(f"{len(tfs)} timeframes")
-    print(fields)
-    print()
     a = 17
     logging.info(f"total elapased: {perf_counter()-pc0}")
