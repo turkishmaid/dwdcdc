@@ -2,22 +2,22 @@
 # coding: utf-8
 
 """
-Check completeness of data.
-
-Created: 27.09.20
+Analyze for which timeframes what data is available. This turns out to be a mojor problem in teh DWD data because days
+without any readings are not listed in the produkt_*.txt files and it varis a lot what data was recorded (or is being
+made available for each day. Similar is expected for the hourly values.
 """
+# Created: 01.10.20
 
 import json
-from typing import List, Union, Tuple
-from datetime import datetime, timedelta
-from time import perf_counter
+from typing import List, Union
 import logging
 from dataclasses import dataclass
+from time import perf_counter
 
 import johanna
 
-from dwdcdc.toolbox import PointInTime
-from dwdcdc.dbtable import get_column_list, get_indicator_select, get_data_fields, get_two, filter_fields
+from dwdcdc.pit import PointInTime
+from dwdcdc.dbtable import get_data_fields
 
 
 @dataclass
@@ -42,6 +42,7 @@ class Timeframe:
                 o["rows"] = None
         return o
 
+
 def _persist(tfl: List[Timeframe], fields: List[str], name: Union[str, int], with_rows: bool = False) -> None:
     assert isinstance(tfl, list)
     assert isinstance(fields, list)
@@ -59,6 +60,25 @@ def _persist(tfl: List[Timeframe], fields: List[str], name: Union[str, int], wit
     with open(fnam, "w") as fh:
         fh.write(s)
     logging.info(f"List[Timeframe] ({len(tfl)} rows) -> {fnam}")
+
+
+def get_indicator_select(tabname: str = "readings", fields: List[str] = None) -> str:
+    if not fields:
+        fields = get_data_fields(tabname)
+    fl = ", \n".join([f"    case when {f} is not null then 'x' else '-' end as {f}" for f in fields])
+    return "select \n    dwdts, \n" + f"{fl} \nfrom {tabname} \nwhere station = ? \norder by dwdts"
+
+
+def get_two(station: int, dwdts: str, tabname: str = "readings", fields: List[str] = None):
+    if "-" in dwdts:
+        dwdts = dwdts.replace("-", "")
+    if not fields:
+        fields = get_data_fields(tabname)
+    sql = "select " + f"dwdts, {', '.join(fields)} from {tabname} where station = ? and dwdts >= ? order by dwdts limit 2"
+    # logging.info(sql)
+    with johanna.Connection(f"from dwdts = {dwdts}", quiet=True) as c:
+        rows = c.cur.execute(sql, (station, dwdts)).fetchall()
+    return rows
 
 
 def overview(station: int, tabname: str = "readings", fields: List[str] = None, with_rows: bool = False) -> List[Timeframe]:
@@ -127,7 +147,7 @@ def show_overview(station: int, tabname: str = "readings", fields: List[str] = N
     return tfs
 
 
-def show_timeframens(tfs: List[Timeframe], fields: List[str], with_rows: bool = False) -> None:
+def show_timeframes(tfs: List[Timeframe], fields: List[str], with_rows: bool = False) -> None:
     assert isinstance(tfs, list)
     assert isinstance(fields, list)
     assert isinstance(with_rows, bool)
@@ -155,92 +175,13 @@ def spot_check_overview():
 
     for station in [2444, 2290, 5906]:
         tfs = overview(station=station, tabname=tabname, fields=fields, with_rows=with_rows)
-        show_timeframens(tfs, fields, with_rows=with_rows)
+        show_timeframes(tfs, fields, with_rows=with_rows)
         _persist(tfs, fields, station, with_rows=with_rows)
-
-"""
-Sample SELECT:
-
-select y.year, y.days,
-       case when r.dwdts is not null then r.dwdts else 0 end / 1.0 / y.days as dwdts,
-       case when r.temp_max is not null then r.temp_max else 0 end / 1.0 / y.days as temp_max,
-       case when r.temp_avg is not null then r.temp_avg else 0 end / 1.0 / y.days as temp_avg,
-       case when r.temp_min is not null then r.temp_min else 0 end / 1.0 / y.days as temp_min,
-       case when r.resp is not null then r.resp else 0 end / 1.0 / y.days as resp
-    from (select year, days from years) y
-    left outer join (select year,
-                sum(case when dwdts is not null then 1 else 0 end) as dwdts,
-                sum(case when temp2m_max is not null then 1 else 0 end) as temp_max,
-                sum(case when temp2m_avg is not null then 1 else 0 end) as temp_avg,
-                sum(case when temp2m_min is not null then 1 else 0 end) as temp_min,
-                sum(case when resp is not null then 1 else 0 end) as resp
-            from readings
-            where station = 2290
-            group by year) r
-        on y.year = r.year
-    join stations s on s.station = 2290
-        where y.year between substr(s.isodate_from, 1, 4) and substr(s.isodate_to, 1, 4);
-"""
-
-def generate_missingdays_select(tabname: str = "readings") -> Tuple[str, list]:
-    fields = ["dwdts"]
-    fields.extend(get_data_fields(tabname))
-    sep = ", \n"
-    cs = [f"y.days - case when r.{f} is not null then r.{f} else 0 end as {f}" for f in fields]
-    ss = [f"sum(case when {f} is not null then 1 else 0 end) as {f}" for f in fields]
-    sql = "select " + f"""y.year, y.days,
-           {sep.join(cs)}
-        from (select year, days from years) y
-        left outer join (select year,
-                    {sep.join(ss)}
-                from {tabname}
-                where station = ?
-                group by year) r
-            on y.year = r.year
-        join stations s on s.station = ?
-            where y.year between substr(s.isodate_from, 1, 4) and substr(s.isodate_to, 1, 4)
-        order by y.year desc;
-    """
-    # print(sql)
-    return sql, fields
-
-
-def good_from(station: int, missing_days: int = 4, tabname: str = "readings") -> dict:
-    """
-    Determines from which year we have almost consecutive data for each value. "Almost" will be assessed by the number
-    of days where thae value is not available. A year is almost complete when max. missing_days readings for that value
-    are missing.
-    :param station: the station to asses
-    :param missing_days: measure for "almost complete"
-    :param tabname: name of the table where the readings are stored, defualts to "readings"
-    :return:
-    """
-    sql, fields = generate_missingdays_select(tabname)
-    result = {}
-    with johanna.Connection(f"missing days") as c:
-        rows = c.cur.execute(sql, (station, station, )).fetchall()
-    for row in rows:
-        year = row[0]
-        for i, field in enumerate(fields):
-            if row[i+2] > missing_days:
-                if not field in result:
-                    result[field] = int(year) + 1
-        if len(result) == len(row) - 2:
-            logging.info(f"nothing good enough further back than {year+1}, data back until {rows[-1][0]}")
-            break
-    for field in result:
-        logging.info(f"   {field:20s} -> {result[field]}")
-    return result
-
-
 
 
 if __name__ == "__main__":
     pc0 = perf_counter()
     johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
-    #spot_check_overview()
-    #generate_missingdays_select()
-    good_from(2290)
-
+    spot_check_overview()
     a = 17
-    logging.info(f"total elapased: {perf_counter()-pc0}")
+    logging.info(f"total elapased: {perf_counter() - pc0}")

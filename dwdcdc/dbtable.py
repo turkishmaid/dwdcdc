@@ -28,7 +28,8 @@ SQL_COLUMNS = "SELECT" + """
 @static_vars(buffer={})
 def get_columns(tabnam: str = "readings") -> List[tuple]:
     """
-    Get column list for table. Buffered, so you can access as often as you like.
+    Get column list for table. Buffered, so you can access as often as you like. But does not return copies,
+    so do not modify the list returned.
     :param tabnam: table name in current johanna database
     :return: list of tuples (colnam: str, type: str, primary_key: int)
     """
@@ -44,7 +45,7 @@ def verify(tabnam: str = "readings") -> bool:
     Verify assumption on a readings table, namely that the primary key is
     (station: INTEGER, dwdts: TEXT)
     :param tabnam: table name in current johanna database
-    :return: indicator whether tyble is formed properly
+    :return: indicator whether table is formed properly
     """
     columns = get_columns(tabnam)
     if len(columns) < 2:
@@ -87,40 +88,12 @@ def get_data_fields(tabname: str = "readings") -> list:
     return filter_fields(fields)
 
 
-def get_indicator_select(tabname: str = "readings", fields: List[str] = None) -> str:
-    if not fields:
-        fields = get_data_fields(tabname)
-    fl = ", \n".join([f"    case when {f} is not null then 'x' else '-' end as {f}" for f in fields])
-    return "select \n    dwdts, \n" + f"{fl} \nfrom {tabname} \nwhere station = ? \norder by dwdts"
-
-
-def get_two(station: int, dwdts: str, tabname: str = "readings", fields: List[str] = None):
-    if "-" in dwdts:
-        dwdts = dwdts.replace("-", "")
-    if not fields:
-        fields = get_data_fields(tabname)
-    sql = "select " + f"dwdts, {', '.join(fields)} from {tabname} where station = ? and dwdts >= ? order by dwdts limit 2"
-    # logging.info(sql)
-    with johanna.Connection(f"from dwdts = {dwdts}", quiet=True) as c:
-        rows = c.cur.execute(sql, (station, dwdts)).fetchall()
-    return rows
-
-
-SQL_CREATE_YEARS = """
-    CREATE TABLE IF NOT EXISTS years (
-        year INTEGER,
-        days INTEGER,
-        PRIMARY KEY (year)
-    );
-"""
-
-SQL_INSERT_YEARS = """
-    INSERT OR REPLACE INTO years
-        VALUES (?, ?)
-"""
-
-
-def create_years():
+def update_years():
+    """
+    To compensate for gaps in the DWD data, where no readings are available. The table is suitable to left outer join
+    yearly aggrates from reading tables to it.
+    :return:
+    """
 
     def days(year):
         if year == thisyear:
@@ -131,21 +104,21 @@ def create_years():
 
     thisyear = date.today().year
     with johanna.Connection(text=f"create? table years") as c:
-        c.cur.executescript(SQL_CREATE_YEARS)
+        c.cur.executescript("""
+            CREATE TABLE IF NOT EXISTS years (
+                year INTEGER,
+                days INTEGER,
+                PRIMARY KEY (year)
+            );
+        """)
+    # TODO years interval could be retrieved from the stations table
+    # TODO could be optimized a little bit to not insert when first year in range ia already there and last one is ok
     years = [(y, days(y)) for y in range(1700, 2051)]
     with johanna.Connection(text=f"insert? {len(years)} years") as c:
-        c.cur.executemany(SQL_INSERT_YEARS, years)
+        c.cur.executemany("INSERT OR REPLACE INTO years VALUES (?, ?)", years)
         c.commit()
 
 
 if __name__ == "__main__":
     johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
-    create_years()
-
-    if 1 == 0:
-        johanna.interactive(dotfolder="~/.dwd-cdc", dbname="kld.sqlite")
-        assert verify()
-        columns = get_columns()
-        column_list = get_column_list()
-        print(get_indicator_select())
-        hurz = 17
+    update_years()
