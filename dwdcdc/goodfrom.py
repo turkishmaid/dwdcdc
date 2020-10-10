@@ -125,6 +125,7 @@ if __name__ == "__main__":
         print(fmt % row)
     print()
 
+    # result = good_from(2290, data=data)
     result = good_from(2290, data=data)
 
     print()
