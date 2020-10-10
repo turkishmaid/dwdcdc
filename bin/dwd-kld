@@ -155,7 +155,7 @@ def main():
     if OPCODE:
         args = {
             "--stations": OPCODE == "stations",
-            "--station": "5906" if OPCODE == "station" else False,  # Mannheim
+            "--station": "5906,2290,3382,5404" if OPCODE == "station" else False,  # Mannheim
             "--install": OPCODE == "install",
             "--test": OPCODE == "test"
         }
@@ -177,9 +177,14 @@ def main():
         stations.get("KLD")
 
     if args["--station"]:
-        download(int(args["--station"]))
-        # at2h.ProcessStationen()
-        # at2h.process_dataset("historical")
+        if args["--station"].isdigit():
+            download(int(args["--station"]))
+        else:
+            # support format --station STATION[,...]
+            l = args["--station"].split(",")
+            for s in l:
+                # todo: verify before
+                download(int(s))
 
 
 if __name__ == "__main__":
